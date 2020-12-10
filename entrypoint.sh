@@ -18,6 +18,10 @@ fi
 startGroup "Print runner configuration"
 
 echo "GITHUB_WORKFLOW=$GITHUB_WORKFLOW"
+echo "GITHUB_RUN_ID=$GITHUB_RUN_ID"
+echo "GITHUB_RUN_NUMBER=$GITHUB_RUN_NUMBER"
+# echo "GITHUB_ACTION=$GITHUB_ACTION"  # useless (and slash missing)
+echo "GITHUB_REPOSITORY=$GITHUB_REPOSITORY"
 echo "RUNNER_OS=$RUNNER_OS"
 echo "RUNNER_TEMP=$RUNNER_TEMP"
 echo "RUNNER_WORKSPACE=$RUNNER_WORKSPACE"
@@ -68,6 +72,9 @@ INPUT_EXPORT: the space-separated list of env variables to export
 EOF
 }
 
+cp /app/coq.json "$HOME/coq.json"
+echo "::add-matcher::$HOME/coq.json"
+
 ## Parse options
 OPTIND=1 # Reset is necessary if getopts was used previously in the script.  It is a good idea to make this local in a function.
 while getopts "h" opt; do
@@ -104,11 +111,16 @@ if test -z "$INPUT_CUSTOM_IMAGE"; then
     # TODO: validation of INPUT_COQ_VERSION, INPUT_OCAML_VERSION
     COQ_IMAGE="coqorg/coq:$INPUT_COQ_VERSION"
 
-    # TODO: uncomment this at the end of the one-switch docker-coq migration
-    # if [ "$INPUT_OCAML_VERSION" = 'minimal' ]; then
-    #     echo "ERROR: 'ocaml_version: minimal' is not supported anymore."
-    #     exit 1
-    # fi
+    if [ "$INPUT_OCAML_VERSION" = 'minimal' ]; then
+        # Rely on line 'echo "::add-matcher::$HOME/coq.json"' above.
+        cat <<EOF
+File "./.github/workflows", line 1, characters 0-1:
+Warning: You used the deprecated value 'ocaml_version: "minimal"' (to be removed in docker-coq-action v2), please consider using 'ocaml_version: "default"' (the default recommended version in docker-coq) instead or a more specific ocaml_version in https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/workflow
+EOF
+    # TODO: uncomment this at the end of the deprecation phase (in v2)
+    # echo "ERROR: 'ocaml_version: minimal' is not supported anymore."
+    # exit 1
+    fi
     if [ "$INPUT_OCAML_VERSION" != 'default' ] \
        && [ "$INPUT_OCAML_VERSION" != 'minimal' ]; then
         COQ_IMAGE="${COQ_IMAGE}-ocaml-${INPUT_OCAML_VERSION}"
@@ -162,9 +174,6 @@ echo COQ_IMAGE="$COQ_IMAGE"
 docker pull "$COQ_IMAGE"
 
 endGroup
-
-cp /app/coq.json "$HOME/coq.json"
-echo "::add-matcher::$HOME/coq.json"
 
 ## Note to docker-coq-action maintainers: Run ./helper.sh gen & Copy min.sh
 # shellcheck disable=SC2046,SC2086
